@@ -1,0 +1,28 @@
+{
+    "name": "admininfokoding/php-ai-agent-tutorial",
+    "description": "Tutorial Lengkap Membuat AI Agent dengan PHP 8.3 dari Nol hingga MCP & OpenAI API - InfoKoding.com",
+    "type": "project",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Rusmawan Abdullah Sani",
+            "email": "admin@infokoding.com",
+            "homepage": "https://www.linkedin.com/in/rusmawan-abdullah-sani-3b015945/"
+        }
+    ],
+    "require": {
+        "php": ">=8.3",
+        "ext-curl": "*",
+        "ext-json": "*",
+        "ext-pdo": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
+    }
+}

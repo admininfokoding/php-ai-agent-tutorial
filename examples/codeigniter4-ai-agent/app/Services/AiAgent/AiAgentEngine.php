@@ -8,7 +8,7 @@ use Config\Services;
 /**
  * Class AiAgentEngine
  * Engine utama AI Agent di CodeIgniter 4 yang mengelola ReAct Loop (Reasoning + Acting)
- * dan komunikasi dengan REST API Provider LLM (OpenAI/Gemini).
+ * dan komunikasi dengan REST API Provider LLM (OpenAI/Gemini) dilengkapi Exponential Backoff Retry.
  */
 class AiAgentEngine
 {
@@ -25,6 +25,48 @@ class AiAgentEngine
     public function registerTool(ToolInterface $tool): void
     {
         $this->tools[$tool->getName()] = $tool;
+    }
+
+    /**
+     * Method helper HTTP Request dengan Exponential Backoff Retry Loop (Menangani HTTP 429 & 5xx)
+     */
+    private function requestWithRetry(string $url, array $payload, int $maxRetries = 3): ?array
+    {
+        $attempt = 0;
+        $delay = 1; // Detik awal
+
+        while ($attempt < $maxRetries) {
+            $response = $this->client->post($url, [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $this->apiKey,
+                    'Content-Type'  => 'application/json',
+                ],
+                'json'        => $payload,
+                'http_errors' => false
+            ]);
+
+            $statusCode = $response->getStatusCode();
+
+            if ($statusCode === 200) {
+                return json_decode($response->getBody(), true);
+            }
+
+            // Retry jika terkena Rate Limit Exceeded (HTTP 429) atau Server Error (5xx)
+            if ($statusCode === 429 || $statusCode >= 500) {
+                $attempt++;
+                if ($attempt >= $maxRetries) {
+                    break;
+                }
+                sleep($delay);
+                $delay *= 2; // Exponential delay: 1s, 2s, 4s...
+                continue;
+            }
+
+            // Error otentikasi / bad request (400, 401, 403) - Hentikan retry
+            break;
+        }
+
+        return null;
     }
 
     public function run(string $userPrompt): string
@@ -58,23 +100,14 @@ class AiAgentEngine
                 'tools'    => $formattedTools,
             ];
 
-            $response = $this->client->post('https://api.openai.com/v1/chat/completions', [
-                'headers' => [
-                    'Authorization' => 'Bearer ' . $this->apiKey,
-                    'Content-Type'  => 'application/json',
-                ],
-                'json' => $payload,
-                'http_errors' => false
-            ]);
-
-            $result = json_decode($response->getBody(), true);
+            // Eksekusi API via helper Retry
+            $result = $this->requestWithRetry('https://api.openai.com/v1/chat/completions', $payload);
             $choice = $result['choices'][0]['message'] ?? null;
 
             if (!$choice) {
-                return 'Gagal menerima respon dari server LLM.';
+                return 'Gagal menerima respon dari server LLM setelah retry.';
             }
 
-            // Jika LLM meminta pemanggilan Tool
             if (!empty($choice['tool_calls'])) {
                 $messages[] = $choice; // Simpan konteks keputusan LLM
 
@@ -93,7 +126,6 @@ class AiAgentEngine
                     }
                 }
             } else {
-                // Jawaban akhir dari AI Agent
                 return $choice['content'] ?? 'Tidak ada respon.';
             }
         }

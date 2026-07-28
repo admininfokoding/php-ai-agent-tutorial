@@ -4,9 +4,9 @@ namespace App\Tools;
 
 use PDO;
 
-readonly class StockTool implements ToolInterface
+class StockTool implements ToolInterface
 {
-    public function __construct(private ?PDO $pdo = null) {}
+    public function __construct(private readonly ?PDO $pdo = null) {}
 
     public function getDefinition(): array
     {
